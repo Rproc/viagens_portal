@@ -1,17 +1,18 @@
 import sqlite3 as sql
 from os.path import dirname, join
-import datetime
+from datetime import date, datetime
+import datetime as dt
 import numpy as np
 import pandas.io.sql as psql
 import pandas as pd
 from bokeh.io import curdoc
 from bokeh.layouts import column, layout
-from bokeh.models import ColumnDataSource, Div, Select, Slider, TextInput
+from bokeh.models import ColumnDataSource, Div, DateSlider, Select, Slider, TextInput, DateRangeSlider
 from bokeh.plotting import figure
 from bokeh.sampledata.movies_data import movie_path
 
 # DATA
-movies = pd.read_csv('/mnt/hdd/Personal/Documentos/MSc/Lawtechs/viagens_portal/data/dadosbrutos.csv', sep=';')
+movies = pd.read_csv('/mnt/hdd/Personal/Documentos/MSc/Lawtechs/viagens_portal/data/dadosbrutos3.csv', sep=';')
 
 # Transform into numeric (float) for the plots
 movies['valormultas']= movies['valormultas'].str.replace(',', '').astype(float)
@@ -28,6 +29,7 @@ movies['companhiaaereanumerica'] = movies['companhiaaerea'].astype('category').c
 movies['noshownumerico'] = movies['noshow'].astype('category').cat.codes
 movies['remarcadonumerico'] = movies['remarcado'].astype('category').cat.codes
 movies['situacaobilhetenumerico'] = movies['situacaobilhete'].astype('category').cat.codes
+movies['dataembarque'] = pd.to_datetime(movies['dataembarque'], format='%d/%m/%Y')
 
 
 viagens = movies[['codigoorgaosuperior', 'nomeorgaosuperior', 'codigoorgaosolicitante', \
@@ -73,8 +75,13 @@ axis_map = {
 desc = Div(text=open(join(dirname(__file__), "description.html")).read(), sizing_mode="stretch_width")
 
 # Create Input controls
-min_year = Slider(title="Ano Inicial", start=2017, end=2019, value=2017, step=1)
-max_year = Slider(title="Ano Final", start=2017, end=2019, value=2019, step=1)
+# min_year = Slider(title="Ano Inicial", start=2017, end=2019, value=2017, step=1)
+# max_year = Slider(title="Ano Final", start=2017, end=2019, value=2019, step=1)
+# min_date = DateSlider(title="Date", value=date(2015, 4, 1), start=date(2015, 4, 1), end=date(2020, 1, 1), step=1)
+# max_date = DateSlider(title="Date", value=date(2020, 1, 16), start=date(2015, 5, 1), end=date(2020, 1, 16), step=1)
+
+# date_range_slider = DateRangeSlider(title="Intervalo de Datas", value=(dt.datetime(2015, 4, 1), dt.datetime(2020, 1, 16)), start=dt.datetime(2015, 4, 1), end=dt.datetime(2020, 1, 16), step=1)
+
 
 nomeorg = Select(title="Nome Orgão", value="All",
                options=open(join(dirname(__file__), '../viagens/nomeorgaosuperior.txt')).read().split(sep=';'))
@@ -93,6 +100,8 @@ remarc = Select(title="Viagem Remarcada", value="All",
 
 bilhete = Select(title="Sitaução do Bilhete", value="All",
                options=open(join(dirname(__file__), '../viagens/situacaobilhete.txt')).read().split(sep=';'))
+min_date = TextInput(title="Insira Data de Inicio (dia/mes/ano)")
+max_date = TextInput(title="Insira Data de Término (dia/mes/ano)")
 
 # reviews = Slider(title="Minimum number of reviews", value=80, start=10, end=300, step=10)
 # min_year = Slider(title="Year released", start=1940, end=2014, value=1970, step=1)
@@ -107,14 +116,15 @@ x_axis = Select(title="X Axis", options=sorted(axis_map.keys()), value="Classe T
 y_axis = Select(title="Y Axis", options=sorted(axis_map.keys()), value="Valor Tarifa (reais)")
 
 # Create Column Data Source that will be used by the plot
-source = ColumnDataSource(data=dict(x=[], y=[], nomeorgaosuperior=[], year=[], nomeorgaosolicitante=[], classetarifaria=[], valortarifacomercial=[]))
+source = ColumnDataSource(data=dict(x=[], y=[], nomeorgaosuperior=[], year=[], nomeorgaosolicitante=[], classetarifaria=[], valortarifacomercial=[], situacaobilhete=[], companhiaaerea=[]))
 
 TOOLTIPS=[
     ("Orgão Superior", "@nomeorgaosuperior"),
     ("Orgão Solicitante", "@nomeorgaosolicitante"),
     ("Classe Tarifaria", "@classetarifaria"),
     ("Valor Tarifa", "@valortarifacomercial"),
-    ("Situação do Bilhete", "@situacaobilhete")
+    ("Situação do Bilhete", "@situacaobilhete"),
+    ("Companhia Aerea", "@companhiaaerea")
 ]
 
 p = figure(plot_height=600, plot_width=700, title="", toolbar_location=None, tooltips=TOOLTIPS, sizing_mode="scale_both", tools='wheel_zoom')
@@ -159,16 +169,29 @@ def select_movies():
     noshow_val = noshow.value
     remarc_val = remarc.value
     bilhete_val = bilhete.value
+    d1 = min_date.value.strip()
+    d2 = max_date.value.strip()
+    # min_date = date_range_slider.value
+    # max_date = date_range_slider.value[1].value_as_datetime
 
-    # director_val = director.value.strip()
-    # cast_val = cast.value.strip()
-    selected = viagens#[
+    if not d1:
+        d1 = '01/04/2015'
+
+    if not d2:
+        d2 = '16/1/2020'
+
+    date_min = datetime.strptime(d1, '%d/%m/%Y').date()
+    date_max = datetime.strptime(d2, '%d/%m/%Y').date()
+
+    print(date_min, date_max)
+
+    selected = viagens[
         # (movies.Reviews >= reviews.value) &
         # (movies.BoxOffice >= (boxoffice.value * 1e6)) &
-        # (viagens.dataembarque >= min_year.value) &
-        # (viagens.dataembarque <= max_year.value)
+        (viagens.dataembarque >= date_min) &
+        (viagens.dataembarque <= date_max)
         # (movies.Oscars >= oscars.value)
-    #]
+    ]
     if (nomeorg_val != "All"):
         selected = selected[selected.nomeorgaosuperior.str.contains(nomeorg_val)==True]
         createListSolicitante(selected)
@@ -203,10 +226,13 @@ def update():
         year=df["dataembarque"],
         nomeorgaosolicitante=df["nomeorgaosolicitante"],
         classetarifaria=df["classetarifaria"],
-        valortarifacomercial=df["valortarifacomercial"]
+        valortarifacomercial=df["valortarifacomercial"],
+        situacaobilhete=df['situacaobilhete'],
+        companhiaaerea=df['companhiaaerea']
+
     )
 
-controls = [nomeorg, aerea, min_year, max_year, orgsolicitante, noshow, remarc, bilhete, x_axis, y_axis]
+controls = [nomeorg, aerea, min_date, max_date, orgsolicitante, noshow, remarc, bilhete, x_axis, y_axis]
 for control in controls:
     control.on_change('value', lambda attr, old, new: update())
 
